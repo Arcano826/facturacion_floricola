@@ -1,9 +1,9 @@
-=== SISTEMA DISTRIBUIDO "ENDLESS" ===
-Materia: Computación Distribuida
+=== SISTEMA DISTRIBUIDO "facturación electrónica floricolas" ===
+Materia: Aplicaciones Distribuidas
 Desarrollador: Jeremy Santiago Burgos Pazmiño
 
 1. LINK DE DESCARGA / REPOSITORIO
-[Inserta aquí el link de tu Drive o GitHub con el código]
+https://github.com/Arcano826/facturacion_floricola
 
 2. ACCESOS DEL APLICATIVO (API REST)
 - URL Local (Swagger UI): http://localhost:8000/docs
