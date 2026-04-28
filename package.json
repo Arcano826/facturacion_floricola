@@ -1,0 +1,17 @@
+{
+  "name": "exportar_excel_y_convertir_a_xml",
+  "version": "1.0.0",
+  "description": "",
+  "main": "firmar_sri.mjs",
+  "type": "module",
+  "scripts": {
+    "firmar": "node firmar_sri.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+  "ec-sri-invoice-signer": "^3.0.11"
+  }
+}

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Nodo 1: Microservicio de la API
+  api_endless:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    depends_on:
+      - db_distribuida
+      - rabbitmq_cola
+
+  # Nodo 2: Base de Datos Distribuida (MySQL)
+  db_distribuida:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"
+      MYSQL_DATABASE: endless_floricola
+    ports:
+      - "3307:3306"  # Usamos el 3307 externamente para no chocar con tu MySQL local
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Nodo 3: Cola de Mensajes
+  rabbitmq_cola:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+volumes:
+  db_data:

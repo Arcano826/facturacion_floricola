@@ -1,0 +1,21 @@
+=== SISTEMA DISTRIBUIDO "ENDLESS" ===
+Materia: Computación Distribuida
+Desarrollador: Jeremy Santiago Burgos Pazmiño
+
+1. LINK DE DESCARGA / REPOSITORIO
+[Inserta aquí el link de tu Drive o GitHub con el código]
+
+2. ACCESOS DEL APLICATIVO (API REST)
+- URL Local (Swagger UI): http://localhost:8000/docs
+- Comando de inicio: uvicorn api:app --reload
+
+3. ACCESOS DE BASE DE DATOS (NODO DISTRIBUIDO VÍA DOCKER)
+- Motor: MySQL 8.0 
+- Host: localhost
+- Puerto expuesto: 3307 (Mapeado al 3306 del contenedor)
+- Usuario: root
+- Contraseña: 1234
+- Esquema (Base de Datos): endless_floricola
+
+4. NOTAS TÉCNICAS
+El sistema implementa una arquitectura de microservicios distribuida. La base de datos corre en un nodo contenedorizado independiente y los procesos de firma (Node.js) y envío al SRI (Python/Zeep) se gestionan a través de la API REST de FastAPI.
