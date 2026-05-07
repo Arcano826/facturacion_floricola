@@ -35,11 +35,24 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Ahora, en tus rutas, añade el parámetro "tags" para que se organicen bonito:
 
-@app.post("/api/conciliar-facturar", tags=["Procesamiento Core"], summary="Subir Excel, Conciliar y Firmar XML")
+@app.post("/api/conciliar-facturar", tags=["Procesamiento Core"])
 async def subir_y_procesar_excel(
-    file_excel: UploadFile = File(..., description="Archivo de reporte (.xlsx)"), 
-    file_p12: UploadFile = File(..., description="Firma Electrónica (.p12)"), 
-    password_p12: str = Form(..., description="Contraseña de la firma")
+    file_excel: UploadFile = File(...), 
+    file_p12: UploadFile = File(...), 
+    password_p12: str = Form(...),
+    # Datos Fijos de la Finca
+    razon_social: str = Form("CANDO CHANGO TATIANA ELIZABETH"),
+    ruc_finca: str = Form("0503847147001"),
+    establecimiento: str = Form("001"),
+    punto_emision: str = Form("002"),
+    direccion_matriz: str = Form("COTOPAXI / SAQUISILI / CHANTILIN / SAN FRANCISCO S/N"),
+    es_exportador: bool = Form(True, description="¿Agregar leyenda de EXPORTADOR HABITUAL DE BIENES?"),
+    # Puertos por defecto (Cambiables desde la web)
+    lugar_incoterm: str = Form("QUITO", description="Lugar IncoTerm por defecto"),
+    puerto_embarque: str = Form("QUITO", description="Puerto de Embarque por defecto"),
+    # Switches
+    incluir_direccion_comprador: bool = Form(False, description="¿Incluir Dirección del Comprador?"),
+    es_rimpe: bool = Form(False, description="¿Es contribuyente RIMPE?")
 ):
     if not file_excel.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un .xlsx")
@@ -59,10 +72,25 @@ async def subir_y_procesar_excel(
     captura_consola = io.StringIO()
     salida_original = sys.stdout
     sys.stdout = captura_consola
+    config_finca = {
+        "razonSocial": razon_social,
+        "nombreComercial": razon_social,
+        "ruc": ruc_finca,
+        "estab": establecimiento,
+        "ptoEmi": punto_emision,
+        "dirMatriz": direccion_matriz,
+        "esExportador": es_exportador, # Pasamos el switch al generador
+        "lugarIncoTerm": lugar_incoterm,
+        "puertoEmbarque": puerto_embarque,
+        "ambiente": "2",
+        "tipoEmision": "1"
+    }
 
     try:
-        # Pasamos las 3 variables a tu script principal
-        procesar_excel_automatico(excel_path, p12_path, password_p12)
+        procesar_excel_automatico(
+            excel_path, p12_path, password_p12, 
+            config_finca, incluir_direccion_comprador, es_rimpe
+        )
     except Exception as e:
         print(f"Error crítico durante procesamiento: {str(e)}")
     finally:

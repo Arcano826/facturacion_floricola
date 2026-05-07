@@ -6,7 +6,7 @@ import subprocess
 import re
 import mysql.connector
 
-def generar_factura(row, output_dir):
+def generar_factura(row, output_dir, conexion, config_finca, incluir_dir=False, rimpe=False):
     try:
         # Extraer datos (ajustado a tus columnas)
         factura_raw = str(row['FACTURA']).strip()
@@ -42,14 +42,15 @@ def generar_factura(row, output_dir):
             return s
         formatted = format_price(precio_unitario)
         fecha_str = fecha_emision.strftime("%d%m%Y")
+        # Asegúrate de que tu clave incompleta use la configuración de la web
         clave_incompleta = (fecha_str 
-        + "01" #Tipo de comprobante
-        + "1716224967001" #RUC #Cambiar por finca
-        + "2" #Ambiente
-        + "001002" #Serie (Establecimiento y punto de emisión) #Cambiar por finca
-        + num_factura #Secuencial
-        + "43762667" #codigo aleatorio
-        + "1") #Tipo de comprobante
+        + "01" # Tipo de comprobante
+        + config_finca['ruc'] # RUC dinámico de la web
+        + config_finca['ambiente'] # Ambiente
+        + config_finca['estab'] + config_finca['ptoEmi'] # Serie dinámica
+        + num_factura # Secuencial
+        + "43762667" # Código aleatorio
+        + config_finca['tipoEmision']) # Tipo de emisión
 
         #Digito verificador
 
@@ -69,16 +70,13 @@ def generar_factura(row, output_dir):
         digito_verificador = calcular_digito_verificador(clave_incompleta)
         clave_acceso = clave_incompleta + str(digito_verificador)
 
+        with open("claves_acceso.txt", "a") as archivo:
+            archivo.write(clave_acceso + "\n")
+
         # Guardar clave de acceso en un archivo de texto
-# Conectar a la Base de Datos Distribuida (MySQL en Docker)
+        # Conectar a la Base de Datos Distribuida (MySQL en Docker)
+        # GUARDAR EN BASE DE DATOS MÁS RÁPIDO
         try:
-            conexion = mysql.connector.connect(
-                host="127.0.0.1",
-                port=3307,
-                user="root",
-                password="1234",
-                database="endless_floricola"
-            )
             cursor = conexion.cursor()
             
             # 1. Insertar en la tabla conciliacion_dae
@@ -88,10 +86,9 @@ def generar_factura(row, output_dir):
             val_dae = (num_factura, cliente, tallos, float(precio_unitario), fecha_emision.strftime('%Y-%m-%d'))
             cursor.execute(sql_dae, val_dae)
             
-            # Obtener el ID de la factura que acabamos de insertar
             factura_id = cursor.lastrowid
             
-            # 2. Insertar en la tabla bitacora_sri la clave de acceso
+            # 2. Insertar en bitacora_sri
             sql_bitacora = """INSERT INTO bitacora_sri 
                               (factura_id, clave_acceso, mensaje_error) 
                               VALUES (%s, %s, %s)"""
@@ -100,45 +97,59 @@ def generar_factura(row, output_dir):
             
             conexion.commit() # Confirmar los cambios
             cursor.close()
-            conexion.close()
+            # Ya NO cerramos la conexión aquí
+            
             print(f"✅ Factura {num_factura} y Clave guardadas en MySQL.")
             
         except Exception as err:
-            print(f"⚠️ Error conectando a BD: {err}")
+            print(f"⚠️ Error en BD: {err}")
 
         # Crear XML
         factura = ET.Element("factura", id="comprobante", version="1.1.0")
         
         # Info Tributaria (datos fijos)
         info_trib = ET.SubElement(factura, "infoTributaria")
-        ET.SubElement(info_trib, "ambiente").text = "2"
-        ET.SubElement(info_trib, "tipoEmision").text = "1"
-        ET.SubElement(info_trib, "razonSocial").text = "LATORRE LATORRE JEAN PAUL SEBASTIAN" #Cambiar por finca
-        ET.SubElement(info_trib, "nombreComercial").text = "LATORRE LATORRE JEAN PAUL SEBASTIAN" #Cambiar por finca
-        ET.SubElement(info_trib, "ruc").text = "1716224967001" #Cambiar por finca
-        ET.SubElement(info_trib, "claveAcceso").text = clave_acceso       
+        ET.SubElement(info_trib, "ambiente").text = config_finca['ambiente']
+        ET.SubElement(info_trib, "tipoEmision").text = config_finca['tipoEmision']
+        ET.SubElement(info_trib, "razonSocial").text = config_finca['razonSocial'] 
+        ET.SubElement(info_trib, "nombreComercial").text = config_finca['nombreComercial'] 
+        ET.SubElement(info_trib, "ruc").text = config_finca['ruc'] 
+        ET.SubElement(info_trib, "claveAcceso").text = clave_acceso        
         ET.SubElement(info_trib, "codDoc").text = "01"
-        ET.SubElement(info_trib, "estab").text = "001" #Cambiar por finca
-        ET.SubElement(info_trib, "ptoEmi").text = "002" #Cambiar por finca
+        ET.SubElement(info_trib, "estab").text = config_finca['estab'] 
+        ET.SubElement(info_trib, "ptoEmi").text = config_finca['ptoEmi'] 
         ET.SubElement(info_trib, "secuencial").text = num_factura
-        ET.SubElement(info_trib, "dirMatriz").text = "PICHINCHA / CAYAMBE / CAYAMBE / ASCAZUBI N2-06 Y VIVAR" #Cambiar por finca
-        ET.SubElement(info_trib, "contribuyenteRimpe").text = "CONTRIBUYENTE RÉGIMEN RIMPE" # Solo si es contribuyente RIMPE, de lo contrario, eliminar esta línea #Cambiar por finca
+        ET.SubElement(info_trib, "dirMatriz").text = config_finca['dirMatriz'] 
+        
+        # Activar RIMPE solo si se marcó en la web
+        if rimpe:
+            ET.SubElement(info_trib, "contribuyenteRimpe").text = "CONTRIBUYENTE RÉGIMEN RIMPE"
 
-        # Info Factura
+        # --- INFO FACTURA ---
         info_fact = ET.SubElement(factura, "infoFactura")
         ET.SubElement(info_fact, "fechaEmision").text = fecha_emision_formatted
-        ET.SubElement(info_fact, "dirEstablecimiento").text = "PICHINCHA / CAYAMBE / CAYAMBE / ASCAZUBI N2-06 Y VIVAR                                                 EXPORTADOR HABITUAL DE BIENES" #Cambiar por finca
+        leyenda_exportador = "                                                 EXPORTADOR HABITUAL DE BIENES" if config_finca['esExportador'] else ""
+        ET.SubElement(info_fact, "dirEstablecimiento").text = config_finca['dirMatriz'] + leyenda_exportador
         ET.SubElement(info_fact, "obligadoContabilidad").text = "NO"
         ET.SubElement(info_fact, "comercioExterior").text = "EXPORTADOR"
         ET.SubElement(info_fact, "incoTermFactura").text = "FOB"
-        ET.SubElement(info_fact, "lugarIncoTerm").text = "QUITO"  ##str(row['LUGARINCOTERM'])## se cambia si es diferente embarque
+        
+        # LÓGICA DE EMBARQUE: Si el Excel tiene la columna, la usa. Si no, usa lo de la web.
+        valor_lugar_incoterm = str(row['LUGARINCOTERM']) if 'LUGARINCOTERM' in row and pd.notna(row['LUGARINCOTERM']) else config_finca['lugarIncoTerm']
+        valor_puerto_embarque = str(row['PUERTOEMBARQUE']) if 'PUERTOEMBARQUE' in row and pd.notna(row['PUERTOEMBARQUE']) else config_finca['puertoEmbarque']
+        
+        ET.SubElement(info_fact, "lugarIncoTerm").text = valor_lugar_incoterm
         ET.SubElement(info_fact, "paisOrigen").text = "593"
-        ET.SubElement(info_fact, "puertoEmbarque").text = "QUITO" ##str(row['PUERTOEMBARQUE'])## se cambia si es diferente embarque
+        ET.SubElement(info_fact, "puertoEmbarque").text = valor_puerto_embarque
         ET.SubElement(info_fact, "puertoDestino").text = str(row['DESTINO'])
         ET.SubElement(info_fact, "tipoIdentificacionComprador").text = "08"
         ET.SubElement(info_fact, "razonSocialComprador").text = cliente
         ET.SubElement(info_fact, "identificacionComprador").text = str(int(row['IDENTIFICACION DEL COMPRADOR']))
-        # ET.SubElement(info_fact, "direccionComprador").text = str(row['DIRECCION DEL COMPRADOR']) # Colocar si tiene dirección del comprador
+        
+        # LÓGICA DIRECCIÓN: Solo si se activó en la web y la columna existe en el Excel
+        if incluir_dir and 'DIRECCION DEL COMPRADOR' in row and pd.notna(row['DIRECCION DEL COMPRADOR']):
+            ET.SubElement(info_fact, "direccionComprador").text = str(row['DIRECCION DEL COMPRADOR'])
+            
         ET.SubElement(info_fact, "totalSinImpuestos").text = f"{fob:.2f}"
         ET.SubElement(info_fact, "incoTermTotalSinImpuestos").text = "FOB"
         ET.SubElement(info_fact, "totalDescuento").text = f"{descuento:.2f}"
@@ -180,7 +191,9 @@ def generar_factura(row, output_dir):
         ET.SubElement(impuesto, "baseImponible").text = f"{fob:.2f}"
         ET.SubElement(impuesto, "valor").text = "0.00"
         info_adicional = ET.SubElement(factura, "infoAdicional")
-        # ET.SubElement(info_adicional, "campoAdicional", nombre = "Dirección").text = str(row['DIRECCION DEL COMPRADOR']) # Se coloca Direccion del comprador si existe
+        if incluir_dir and 'DIRECCION DEL COMPRADOR' in row and pd.notna(row['DIRECCION DEL COMPRADOR']):
+            ET.SubElement(info_adicional, "campoAdicional", nombre="Dirección").text = str(row['DIRECCION DEL COMPRADOR'])
+            
         ET.SubElement(info_adicional, "campoAdicional", nombre="  ").text = info_texto
         
         
@@ -236,7 +249,7 @@ def firmar_xml(xml_path, p12_path, p12_password, tipo='factura'):
     print("Firmado correctamente:", firmado_path)
     return firmado_path
 
-def procesar_excel_automatico(ruta_excel, p12_path, p12_password):
+def procesar_excel_automatico(ruta_excel, p12_path, p12_password, config_finca, incluir_dir=False, rimpe=False):
     """
     Función adaptada que ahora recibe la ruta de la firma y la contraseña desde la API.
     """
@@ -248,13 +261,21 @@ def procesar_excel_automatico(ruta_excel, p12_path, p12_password):
         hoja = "REPORTE FACTURACION"
         print(f"Iniciando procesamiento distribuido del archivo '{ruta_excel}'...")
         df = pd.read_excel(ruta_excel, sheet_name=hoja)
-        
+
+        # ABRIR LA PUERTA DE MYSQL UNA SOLA VEZ AQUÍ
+        conexion_global = mysql.connector.connect(
+            host="127.0.0.1", port=3307, user="root",
+            password="1234", database="endless_floricola"
+        )
+
         for _, row in df.iterrows():
             if pd.notna(row.get('FACTURA')):
-                xml_file = generar_factura(row, generados_dir)
+                xml_file = generar_factura(row, generados_dir, conexion_global, config_finca, incluir_dir, rimpe)
                 if xml_file:
                     # Le pasamos la firma y contraseña a la función de firmar
                     firmado = firmar_xml(xml_file, p12_path, p12_password, tipo='factura')
+        # CERRAMOS LA PUERTA AL TERMINAR TODAS LAS FACTURAS
+        conexion_global.close()
     else:
         print("ERROR: Archivo no encontrado.")
 
